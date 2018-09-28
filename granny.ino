@@ -9,35 +9,44 @@
 #include <tables/saw2048_int8.h>
 #include <tables/triangle2048_int8.h>
 #include <tables/square_no_alias_2048_int8.h>
-
-MIDI_CREATE_DEFAULT_INSTANCE();
-
-#define WAVE_SWITCH 2
-#define SINE_WAVE_LED 5
-#define TRIANGLE_WAVE_LED 6
-#define SAW_WAVE_LED 7
-#define SQUARE_WAVE_LED 8
-#define LED 13
+#include <tables/noise_static_1_16384_int8.h>
 
 #define CONTROL_RATE 128
+
+#define PIN_LED 13
+
+#define PIN_SINE_WAVE_SWITCH 2
+#define PIN_SAW_WAVE_SWITCH 3
+#define PIN_TRIANGLE_WAVE_SWITCH 4
+#define PIN_SQUARE_WAVE_SWITCH 5
+#define PIN_NOISE_SWITCH 6
 
 #define ATTACK 50
 #define DECAY 50
 #define SUSTAIN 5000
 #define RELEASE 200
-
 #define ATTACK_LEVEL 255
 #define DECAY_LEVEL 255
 
-
 #define NUMBER_OF_POLYPHONY 6
+
+enum WAVE_TABLE {
+    SINE,
+    SAW,
+    TRIANGLE,
+    SQUARE,
+    NOISE
+};
+
+
 Oscil<2048, AUDIO_RATE> oscillators[NUMBER_OF_POLYPHONY];
 ADSR<CONTROL_RATE, CONTROL_RATE> envelopes[NUMBER_OF_POLYPHONY];
 byte notes[] = {0, 0, 0, 0, 0, 0};
 byte gain[] = {0, 0, 0, 0, 0, 0};
-byte waveNumber = 1;
 int sensorPin = A0;
 int decayValue = 50;
+
+MIDI_CREATE_DEFAULT_INSTANCE();
 
 void updateLed() {
     int numberOfNotes = 0;
@@ -46,9 +55,9 @@ void updateLed() {
     }
 
     if (numberOfNotes == 0) {
-        digitalWrite(LED, LOW);
+        digitalWrite(PIN_LED, LOW);
     } else {
-        digitalWrite(LED, HIGH);
+        digitalWrite(PIN_LED, HIGH);
     }
 }
 
@@ -81,7 +90,12 @@ void HandleNoteOff(byte channel, byte note, byte velocity) {
 
 void setup() {
 
-    pinMode(LED, OUTPUT);
+    pinMode(PIN_LED, OUTPUT);
+    pinMode(PIN_SINE_WAVE_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_SAW_WAVE_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_TRIANGLE_WAVE_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_SQUARE_WAVE_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_NOISE_SWITCH, INPUT_PULLUP);
 
     MIDI.begin(MIDI_CHANNEL_OMNI);
     MIDI.setHandleNoteOn(HandleNoteOn);
@@ -92,7 +106,6 @@ void setup() {
         envelopes[i].setTimes(ATTACK, DECAY, SUSTAIN, RELEASE);
         //FIXME envelope potentiometers
 
-        //FIXME update using the rotary switch
         oscillators[i].setTable(SIN2048_DATA);
     }
 
@@ -100,54 +113,48 @@ void setup() {
     startMozzi(CONTROL_RATE);
 }
 
-//void setWave(byte wav_num) { // good practice to use local parameters to avoid global confusion
-//    static byte wave_indicator_led = 1; // static so value persists between calls
-//    // light the corresponding led, according to selected wave type
-//    digitalWrite(wave_indicator_led, LOW);
-//    // switch/case is faster thsan if/else
-//    switch (wav_num) {
-//        case 1:
-//            wave_indicator_led = SINE_WAVE_LED;
-//            oscil1.setTable(SIN2048_DATA);
-//            oscil2.setTable(SIN2048_DATA);
-//            oscil3.setTable(SIN2048_DATA);
-//            oscil4.setTable(SIN2048_DATA);
-//            oscil5.setTable(SIN2048_DATA);
-//            oscil6.setTable(SIN2048_DATA);
-//            break;
-//        case 2:
-//            wave_indicator_led = TRIANGLE_WAVE_LED;
-//            oscil1.setTable(TRIANGLE2048_DATA);
-//            oscil2.setTable(TRIANGLE2048_DATA);
-//            oscil3.setTable(TRIANGLE2048_DATA);
-//            oscil4.setTable(TRIANGLE2048_DATA);
-//            oscil5.setTable(TRIANGLE2048_DATA);
-//            oscil6.setTable(TRIANGLE2048_DATA);
-//            break;
-//        case 3:
-//            wave_indicator_led = SAW_WAVE_LED;
-//            oscil1.setTable(SAW2048_DATA);
-//            oscil2.setTable(SAW2048_DATA);
-//            oscil3.setTable(SAW2048_DATA);
-//            oscil4.setTable(SAW2048_DATA);
-//            oscil5.setTable(SAW2048_DATA);
-//            oscil6.setTable(SAW2048_DATA);
-//            break;
-//        case 4:
-//            wave_indicator_led = SQUARE_WAVE_LED;
-//            oscil1.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            oscil2.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            oscil3.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            oscil4.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            oscil5.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            oscil6.setTable(SQUARE_NO_ALIAS_2048_DATA);
-//            break;
-//    }
-//    digitalWrite(wave_indicator_led, HIGH);
-//}
+void updateWaveTable() {
+
+
+    WAVE_TABLE waveTable;
+    if (digitalRead(PIN_SINE_WAVE_SWITCH) == LOW) {
+        waveTable = SINE;
+    } else if (digitalRead(PIN_SAW_WAVE_SWITCH) == LOW) {
+        waveTable = SAW;
+    } else if (digitalRead(PIN_TRIANGLE_WAVE_SWITCH) == LOW) {
+        waveTable = TRIANGLE;
+    } else if (digitalRead(PIN_SQUARE_WAVE_SWITCH) == LOW) {
+        waveTable = SQUARE;
+    } else if (digitalRead(PIN_NOISE_SWITCH) == LOW) {
+        waveTable = NOISE;
+    }
+
+    for (int i = 0; i < NUMBER_OF_POLYPHONY; i++) {
+        switch (waveTable) {
+            case SINE:
+                oscillators[i].setTable(SIN2048_DATA);
+                break;
+            case TRIANGLE:
+                oscillators[i].setTable(TRIANGLE2048_DATA);
+                break;
+            case SAW:
+                oscillators[i].setTable(SAW2048_DATA);
+                break;
+            case SQUARE:
+                oscillators[i].setTable(SQUARE_NO_ALIAS_2048_DATA);
+                break;
+            case NOISE:
+                oscillators[i].setTable(NOISE_STATIC_1_16384_DATA);
+                break;
+        }
+    }
+}
 
 
 void updateControl() {
+
+    updateWaveTable();
+
     MIDI.read();
 
     for (int i = 0; i < NUMBER_OF_POLYPHONY; i++) {
